@@ -86,7 +86,7 @@ func TestParseCLIArgsRejectsNonMarkdownFile(t *testing.T) {
 func TestRenderCLIHelpIncludesInstallAndFlags(t *testing.T) {
 	out := renderCLIHelp("markdownviewer")
 	for _, needle := range []string{
-		"go install github.com/lukeryan/markdownviewer@latest",
+		"go install github.com/Soopster/GoMarkdown@latest",
 		"--no-session",
 		"--session-file",
 	} {

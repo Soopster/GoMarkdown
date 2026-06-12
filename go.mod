@@ -1,4 +1,4 @@
-module github.com/lukeryan/markdownviewer
+module github.com/Soopster/GoMarkdown
 
 go 1.25.5
 

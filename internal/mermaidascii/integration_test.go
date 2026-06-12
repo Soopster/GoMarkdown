@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lukeryan/markdownviewer/internal/mermaidascii/diagram"
-	"github.com/lukeryan/markdownviewer/internal/mermaidascii/sequence"
+	"github.com/Soopster/GoMarkdown/internal/mermaidascii/diagram"
+	"github.com/Soopster/GoMarkdown/internal/mermaidascii/sequence"
 )
 
 // TestSequenceDiagramIntegration tests end-to-end rendering of sequence diagrams.

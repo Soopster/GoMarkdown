@@ -130,7 +130,7 @@ Examples:
   %s docs/
 
 Install:
-  go install github.com/lukeryan/markdownviewer@latest
+  go install github.com/Soopster/GoMarkdown@latest
 `, progName, progName, progName, progName, progName)
 }
 

@@ -8,9 +8,9 @@ import (
 	"sync"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Soopster/GoMarkdown/internal/mermaidascii"
+	mermaiddiagram "github.com/Soopster/GoMarkdown/internal/mermaidascii/diagram"
 	xansi "github.com/charmbracelet/x/ansi"
-	"github.com/lukeryan/markdownviewer/internal/mermaidascii"
-	mermaiddiagram "github.com/lukeryan/markdownviewer/internal/mermaidascii/diagram"
 )
 
 const mermaidPlaceholderPrefix = "@@MV_MERMAID_"

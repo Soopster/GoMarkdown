@@ -5,7 +5,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/lukeryan/markdownviewer/internal/mermaidascii/diagram"
+	"github.com/Soopster/GoMarkdown/internal/mermaidascii/diagram"
 )
 
 func TestParse(t *testing.T) {

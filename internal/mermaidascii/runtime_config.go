@@ -3,7 +3,7 @@ package mermaidascii
 import (
 	"sync"
 
-	"github.com/lukeryan/markdownviewer/internal/mermaidascii/diagram"
+	"github.com/Soopster/GoMarkdown/internal/mermaidascii/diagram"
 )
 
 var (

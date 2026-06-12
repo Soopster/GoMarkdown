@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lukeryan/markdownviewer/internal/mermaidascii/diagram"
-	"github.com/lukeryan/markdownviewer/internal/mermaidascii/diagram/testutil"
+	"github.com/Soopster/GoMarkdown/internal/mermaidascii/diagram"
+	"github.com/Soopster/GoMarkdown/internal/mermaidascii/diagram/testutil"
 	"github.com/mattn/go-runewidth"
 )
 

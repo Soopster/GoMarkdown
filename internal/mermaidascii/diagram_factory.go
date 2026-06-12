@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lukeryan/markdownviewer/internal/mermaidascii/diagram"
-	"github.com/lukeryan/markdownviewer/internal/mermaidascii/sequence"
+	"github.com/Soopster/GoMarkdown/internal/mermaidascii/diagram"
+	"github.com/Soopster/GoMarkdown/internal/mermaidascii/sequence"
 )
 
 func DiagramFactory(input string) (diagram.Diagram, error) {

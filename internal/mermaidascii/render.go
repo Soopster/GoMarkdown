@@ -3,7 +3,7 @@ package mermaidascii
 import (
 	"fmt"
 
-	"github.com/lukeryan/markdownviewer/internal/mermaidascii/diagram"
+	"github.com/Soopster/GoMarkdown/internal/mermaidascii/diagram"
 )
 
 func RenderDiagram(input string, config *diagram.Config) (string, error) {
