@@ -1,0 +1,24 @@
+# Local runtime state
+.markdownviewer.session.json
+
+# Build outputs
+markdownviewer
+markdownviewer.test
+*.test
+*.exe
+*.out
+*.prof
+coverage.txt
+coverage.out
+
+# Go workspace caches
+bin/
+dist/
+
+# Editor and OS noise
+.DS_Store
+.idea/
+.vscode/
+
+# AI planning / local notes
+history/
