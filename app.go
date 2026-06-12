@@ -803,6 +803,7 @@ type model struct {
 	editMouseSelecting     bool
 	editMouseAnchorOff     int
 	scrollbarDrag          scrollbarDragTarget
+	scrollbarDragGrab      int
 	editLastClickAt        time.Time
 	editLastClickRow       int
 	editLastClickCol       int
@@ -1539,6 +1540,7 @@ type uiStyles struct {
 	// Pre-rendered scroll and gauge glyphs for hot paths
 	scrollTrackGlyph    string
 	scrollThumbGlyph    string
+	scrollEmptyGlyph    string
 	scrollFlashTop      string
 	scrollFlashBottom   string
 	gaugeEmpty          string
@@ -1663,6 +1665,9 @@ func buildStyles(p colorPalette) uiStyles {
 			Foreground(muted).
 			Background(base).
 			Render("█"),
+		scrollEmptyGlyph: lipgloss.NewStyle().
+			Background(base).
+			Render(" "),
 		scrollFlashTop: lipgloss.NewStyle().
 			Foreground(warn).
 			Background(base).
@@ -2770,13 +2775,31 @@ func (m model) previewPaneRect() (x, y, w, h int, ok bool) {
 	return paneX, paneY, max(1, m.rightWidth()-2), max(1, bodyHeight-2), true
 }
 
-func scrollbarTargetOffset(row, height, maxOffset int) int {
+func scrollbarTargetOffset(row, grabOffset, height, totalRows, visibleRows, maxOffset int, insetEnds bool) int {
 	if maxOffset <= 0 || height <= 1 {
 		return 0
 	}
-	row = max(0, min(row, height-1))
-	pct := float64(row) / float64(height-1)
+	geometry := calculateScrollbarGeometry(height, totalRows, visibleRows, 0, insetEnds)
+	thumbLen := geometry.thumbEnd - geometry.thumbStart
+	travel := geometry.trackEnd - geometry.trackStart - thumbLen
+	if travel <= 0 {
+		return 0
+	}
+	thumbStart := row - grabOffset
+	thumbStart = max(geometry.trackStart, min(thumbStart, geometry.trackStart+travel))
+	pct := float64(thumbStart-geometry.trackStart) / float64(travel)
 	return int(math.Round(pct * float64(maxOffset)))
+}
+
+func scrollbarGrabOffset(row int, geometry scrollbarGeometry) int {
+	thumbLen := geometry.thumbEnd - geometry.thumbStart
+	if thumbLen <= 0 {
+		return 0
+	}
+	if row >= geometry.thumbStart && row < geometry.thumbEnd {
+		return row - geometry.thumbStart
+	}
+	return thumbLen / 2
 }
 
 func (m model) previewScrollbarRowFromMouse(x, y int, clampToBounds bool) (row int, ok bool) {
@@ -2803,7 +2826,15 @@ func (m model) previewScrollbarRowFromMouse(x, y int, clampToBounds bool) (row i
 
 func (m *model) setPreviewOffsetFromScrollbarRow(row int) {
 	maxOffset := max(0, m.renderedLineCount-m.viewport.Height())
-	target := scrollbarTargetOffset(row, m.viewport.Height(), maxOffset)
+	target := scrollbarTargetOffset(
+		row,
+		m.scrollbarDragGrab,
+		m.viewport.Height(),
+		m.renderedLineCount,
+		m.viewport.Height(),
+		maxOffset,
+		!m.fullScreen,
+	)
 	m.cancelMomentum()
 	m.focusRight = true
 	m.viewport.SetYOffset(target)
@@ -2909,10 +2940,21 @@ func (m *model) handlePreviewScrollbarMouseClick(msg tea.MouseClickMsg) bool {
 	if msg.Button != tea.MouseLeft || m.mode != modePreview {
 		return false
 	}
+	if m.renderedLineCount <= m.viewport.Height() {
+		return false
+	}
 	row, ok := m.previewScrollbarRowFromMouse(msg.X, msg.Y, false)
 	if !ok {
 		return false
 	}
+	geometry := calculateScrollbarGeometry(
+		m.viewport.Height(),
+		m.renderedLineCount,
+		m.viewport.Height(),
+		m.viewport.ScrollPercent(),
+		!m.fullScreen,
+	)
+	m.scrollbarDragGrab = scrollbarGrabOffset(row, geometry)
 	m.setPreviewOffsetFromScrollbarRow(row)
 	m.scrollbarDrag = scrollbarDragPreview
 	return true
@@ -2938,6 +2980,7 @@ func (m *model) handlePreviewScrollbarMouseRelease(msg tea.MouseReleaseMsg) bool
 		return false
 	}
 	m.scrollbarDrag = scrollbarDragNone
+	m.scrollbarDragGrab = 0
 	return true
 }
 
@@ -3123,10 +3166,22 @@ func (m *model) handleRawScrollbarMouseClick(msg tea.MouseClickMsg) bool {
 	if msg.Button != tea.MouseLeft || m.mode != modeRaw {
 		return false
 	}
+	height, totalRows, maxOffset := m.editScrollMetrics()
+	if maxOffset <= 0 {
+		return false
+	}
 	row, ok := m.rawScrollbarRowFromMouse(msg.X, msg.Y, false)
 	if !ok {
 		return false
 	}
+	geometry := calculateScrollbarGeometry(
+		height,
+		totalRows,
+		height,
+		scrollbarPercent(m.textarea.ScrollYOffset(), maxOffset),
+		!m.fullScreen,
+	)
+	m.scrollbarDragGrab = scrollbarGrabOffset(row, geometry)
 	m.setRawOffsetFromScrollbarRow(row)
 	m.scrollbarDrag = scrollbarDragRaw
 	return true
@@ -3193,6 +3248,7 @@ func (m *model) handleRawScrollbarMouseRelease(msg tea.MouseReleaseMsg) bool {
 		return false
 	}
 	m.scrollbarDrag = scrollbarDragNone
+	m.scrollbarDragGrab = 0
 	return true
 }
 

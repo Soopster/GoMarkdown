@@ -150,11 +150,13 @@ func (m model) renderLayout() string {
 			textLines = m.applyEditSelectionHighlight(textLines)
 		}
 		textLines = m.applyEditFocusLineHighlight(textLines)
-		editRows, editWidths := renderWithScrollbarRows(textLines, nil, editContentW, editHeight, m.editScrollbarPercent(), m.styles, 0, true, nil)
+		_, editTotalRows, editMaxOffset := m.editScrollMetrics()
+		editPercent := scrollbarPercent(m.textarea.ScrollYOffset(), editMaxOffset)
+		editRows, editWidths := renderWithScrollbarRows(textLines, nil, editContentW, editHeight, editTotalRows, editPercent, m.styles, 0, true, nil)
 
 		// Preview half
 		pvRows, pvWidths := m.viewportVisibleRows()
-		previewRows, _ := renderWithScrollbarRows(pvRows, pvWidths, previewContentW, previewHeight, m.viewport.ScrollPercent(), m.styles, m.boundaryFlash, true, lc)
+		previewRows, _ := renderWithScrollbarRows(pvRows, pvWidths, previewContentW, previewHeight, m.renderedLineCount, m.viewport.ScrollPercent(), m.styles, m.boundaryFlash, true, lc)
 
 		// Join with divider
 		divider := m.styles.dividerVert
@@ -170,10 +172,12 @@ func (m model) renderLayout() string {
 		if textH <= 0 {
 			textH = 1
 		}
-		rightRows, rightWidths = renderWithScrollbarRows(textLines, nil, m.textarea.Width(), textH, m.editScrollbarPercent(), m.styles, 0, !m.fullScreen, nil)
+		_, totalRows, maxOffset := m.editScrollMetrics()
+		percent := scrollbarPercent(m.textarea.ScrollYOffset(), maxOffset)
+		rightRows, rightWidths = renderWithScrollbarRows(textLines, nil, m.textarea.Width(), textH, totalRows, percent, m.styles, 0, !m.fullScreen, nil)
 	} else {
 		rows, rowWidths := m.viewportVisibleRows()
-		rightRows, rightWidths = renderWithScrollbarRows(rows, rowWidths, m.viewport.Width(), m.viewport.Height(), m.viewport.ScrollPercent(), m.styles, m.boundaryFlash, !m.fullScreen, lc)
+		rightRows, rightWidths = renderWithScrollbarRows(rows, rowWidths, m.viewport.Width(), m.viewport.Height(), m.renderedLineCount, m.viewport.ScrollPercent(), m.styles, m.boundaryFlash, !m.fullScreen, lc)
 		if m.showSectionGauge() {
 			if gaugeRows := m.renderSectionGaugeRows(); len(gaugeRows) > 0 {
 				sep := m.styles.dividerVert

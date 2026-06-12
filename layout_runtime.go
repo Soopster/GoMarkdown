@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -441,7 +442,7 @@ func (m *model) setRawOffsetFromScrollbarRow(row int) {
 	if height <= 0 || totalRows <= 0 {
 		return
 	}
-	target := scrollbarTargetOffset(row, height, maxOffset)
+	target := scrollbarTargetOffset(row, m.scrollbarDragGrab, height, totalRows, height, maxOffset, !m.fullScreen)
 	targetCursorDisplayRow := min(totalRows-1, target+height-1)
 	lines := strings.Split(m.textarea.Value(), "\n")
 	rowIdx, col, ok := editDisplayToSourcePoint(lines, max(1, m.textarea.Width()), targetCursorDisplayRow, 0)
@@ -463,17 +464,69 @@ func (m model) editScrollbarPercent() float64 {
 		return 0
 	}
 	_, _, maxOffset := m.editScrollMetrics()
+	return scrollbarPercent(m.textarea.ScrollYOffset(), maxOffset)
+}
+
+func scrollbarPercent(offset, maxOffset int) float64 {
 	if maxOffset <= 0 {
 		return 1
 	}
-	y := m.textarea.ScrollYOffset()
-	if y <= 0 {
+	if offset <= 0 {
 		return 0
 	}
-	if y >= maxOffset {
+	if offset >= maxOffset {
 		return 1
 	}
-	return float64(y) / float64(maxOffset)
+	return float64(offset) / float64(maxOffset)
+}
+
+type scrollbarGeometry struct {
+	trackStart int
+	trackEnd   int
+	thumbStart int
+	thumbEnd   int
+	scrollable bool
+}
+
+func calculateScrollbarGeometry(height, totalRows, visibleRows int, percent float64, insetEnds bool) scrollbarGeometry {
+	if height <= 0 {
+		return scrollbarGeometry{}
+	}
+	trackStart := 0
+	trackEnd := height
+	if insetEnds && height > 2 {
+		trackStart++
+		trackEnd--
+	}
+	trackLen := trackEnd - trackStart
+	if trackLen <= 0 || totalRows <= visibleRows || totalRows <= 0 {
+		return scrollbarGeometry{
+			trackStart: trackStart,
+			trackEnd:   trackEnd,
+			thumbStart: trackStart,
+			thumbEnd:   trackEnd,
+		}
+	}
+
+	visibleRows = max(1, min(visibleRows, totalRows))
+	thumbLen := int(math.Round(float64(trackLen) * float64(visibleRows) / float64(totalRows)))
+	thumbLen = max(1, min(thumbLen, trackLen))
+	if trackLen > 1 {
+		thumbLen = min(thumbLen, trackLen-1)
+	}
+	percent = math.Max(0, math.Min(1, percent))
+	travel := trackLen - thumbLen
+	thumbStart := trackStart
+	if travel > 0 {
+		thumbStart += int(math.Round(percent * float64(travel)))
+	}
+	return scrollbarGeometry{
+		trackStart: trackStart,
+		trackEnd:   trackEnd,
+		thumbStart: thumbStart,
+		thumbEnd:   thumbStart + thumbLen,
+		scrollable: true,
+	}
 }
 
 func (m model) chromeRows() int {
@@ -1001,7 +1054,7 @@ func clampHeight(content string, height int, filler string) string {
 	return buf.String()
 }
 
-func renderWithScrollbarRows(rows []string, rowWidths []int, width int, height int, percent float64, s uiStyles, boundaryFlash int, insetEnds bool, lc *layoutCache) ([]string, []int) {
+func renderWithScrollbarRows(rows []string, rowWidths []int, width int, height int, totalRows int, percent float64, s uiStyles, boundaryFlash int, insetEnds bool, lc *layoutCache) ([]string, []int) {
 	if height <= 0 {
 		return nil, nil
 	}
@@ -1018,24 +1071,10 @@ func renderWithScrollbarRows(rows []string, rowWidths []int, width int, height i
 			}
 		}
 	}
-	thumbMin := 0
-	thumbMax := height - 1
-	if insetEnds && height > 2 {
-		thumbMin = 1
-		thumbMax = height - 2
-	}
-	thumbPos := thumbMin
-	if thumbMax > thumbMin {
-		thumbPos = thumbMin + int(percent*float64(thumbMax-thumbMin))
-	}
-	if thumbPos < thumbMin {
-		thumbPos = thumbMin
-	}
-	if thumbPos > thumbMax {
-		thumbPos = thumbMax
-	}
+	geometry := calculateScrollbarGeometry(height, totalRows, height, percent, insetEnds)
 	styledTrack := s.scrollTrackGlyph
 	styledThumb := s.scrollThumbGlyph
+	styledEmpty := s.scrollEmptyGlyph
 	// Boundary flash arrows
 	var flashTop, flashBottom string
 	if boundaryFlash == 1 {
@@ -1093,12 +1132,14 @@ func renderWithScrollbarRows(rows []string, rowWidths []int, width int, height i
 			}
 			b.WriteString(reset)
 		}
-		if i == thumbPos {
-			b.WriteString(styledThumb)
+		if !geometry.scrollable {
+			b.WriteString(styledEmpty)
 		} else if i == 0 && flashTop != "" {
 			b.WriteString(flashTop)
 		} else if i == height-1 && flashBottom != "" {
 			b.WriteString(flashBottom)
+		} else if i >= geometry.thumbStart && i < geometry.thumbEnd {
+			b.WriteString(styledThumb)
 		} else {
 			b.WriteString(styledTrack)
 		}
@@ -1109,8 +1150,8 @@ func renderWithScrollbarRows(rows []string, rowWidths []int, width int, height i
 	return outRows, outWidths
 }
 
-func renderWithScrollbar(rows []string, rowWidths []int, width int, height int, percent float64, s uiStyles, boundaryFlash int, insetEnds bool) string {
-	outRows, _ := renderWithScrollbarRows(rows, rowWidths, width, height, percent, s, boundaryFlash, insetEnds, nil)
+func renderWithScrollbar(rows []string, rowWidths []int, width int, height int, totalRows int, percent float64, s uiStyles, boundaryFlash int, insetEnds bool) string {
+	outRows, _ := renderWithScrollbarRows(rows, rowWidths, width, height, totalRows, percent, s, boundaryFlash, insetEnds, nil)
 	if len(outRows) == 0 {
 		return ""
 	}

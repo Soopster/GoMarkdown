@@ -43,6 +43,7 @@ func BenchmarkRenderWithScrollbarCachedRows(b *testing.B) {
 			widths[start:end],
 			width,
 			height,
+			totalRows,
 			float64(start)/float64(maxStart),
 			styles,
 			0,

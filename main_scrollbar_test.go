@@ -15,7 +15,7 @@ func TestRenderWithScrollbarRowsClampsOverflow(t *testing.T) {
 
 	rows := []string{strings.Repeat("─", 40)}
 	rowWidths := []int{40}
-	outRows, outWidths := renderWithScrollbarRows(rows, rowWidths, 12, 1, 0, styles, 0, false, nil)
+	outRows, outWidths := renderWithScrollbarRows(rows, rowWidths, 12, 1, 40, 0, styles, 0, false, nil)
 
 	if len(outRows) != 1 || len(outWidths) != 1 {
 		t.Fatalf("unexpected output sizes: rows=%d widths=%d", len(outRows), len(outWidths))
@@ -34,7 +34,7 @@ func TestRenderWithScrollbarRowsIgnoresStaleCachedWidth(t *testing.T) {
 
 	rows := []string{"short"}
 	rowWidths := []int{999}
-	outRows, _ := renderWithScrollbarRows(rows, rowWidths, 12, 1, 0, styles, 0, false, nil)
+	outRows, _ := renderWithScrollbarRows(rows, rowWidths, 12, 1, 20, 0, styles, 0, false, nil)
 	if len(outRows) != 1 {
 		t.Fatalf("unexpected output row count: %d", len(outRows))
 	}
@@ -49,7 +49,7 @@ func TestRenderWithScrollbarRowsIgnoresUnderreportedCachedWidth(t *testing.T) {
 
 	rows := []string{strings.Repeat("─", 40)}
 	rowWidths := []int{1}
-	outRows, outWidths := renderWithScrollbarRows(rows, rowWidths, 12, 1, 0, styles, 0, false, nil)
+	outRows, outWidths := renderWithScrollbarRows(rows, rowWidths, 12, 1, 40, 0, styles, 0, false, nil)
 	if len(outRows) != 1 || len(outWidths) != 1 {
 		t.Fatalf("unexpected output sizes: rows=%d widths=%d", len(outRows), len(outWidths))
 	}
@@ -63,7 +63,7 @@ func TestRenderWithScrollbarRowsRestoresBackgroundAfterReset(t *testing.T) {
 	styles := buildStyles(palette)
 	bg := hexToBgSGR(palette.bg)
 
-	outRows, _ := renderWithScrollbarRows([]string{"\x1b[31mred\x1b[0m tail"}, nil, 12, 1, 0, styles, 0, false, nil)
+	outRows, _ := renderWithScrollbarRows([]string{"\x1b[31mred\x1b[0m tail"}, nil, 12, 1, 20, 0, styles, 0, false, nil)
 	if len(outRows) != 1 {
 		t.Fatalf("unexpected output row count: %d", len(outRows))
 	}
@@ -80,7 +80,7 @@ func TestRenderWithScrollbarRowsInsetsThumbAtBottomForBorderedPanes(t *testing.T
 	styles := buildStyles(palette)
 
 	rows := []string{"a", "b", "c", "d", "e"}
-	outRows, _ := renderWithScrollbarRows(rows, nil, 4, len(rows), 1, styles, 0, true, nil)
+	outRows, _ := renderWithScrollbarRows(rows, nil, 4, len(rows), 25, 1, styles, 0, true, nil)
 	thumb := xansi.Strip(styles.scrollThumbGlyph)
 	track := xansi.Strip(styles.scrollTrackGlyph)
 
@@ -89,6 +89,74 @@ func TestRenderWithScrollbarRowsInsetsThumbAtBottomForBorderedPanes(t *testing.T
 	}
 	if !strings.HasSuffix(xansi.Strip(outRows[len(outRows)-1]), track) {
 		t.Fatalf("expected bottom row to remain track, got %q", xansi.Strip(outRows[len(outRows)-1]))
+	}
+}
+
+func TestCalculateScrollbarGeometryUsesProportionalThumb(t *testing.T) {
+	top := calculateScrollbarGeometry(12, 40, 10, 0, true)
+	if !top.scrollable {
+		t.Fatal("expected scrollbar to be active")
+	}
+	if got := top.thumbEnd - top.thumbStart; got != 3 {
+		t.Fatalf("expected three-row thumb, got %d", got)
+	}
+	if top.thumbStart != 1 {
+		t.Fatalf("expected top thumb to start at inset row 1, got %d", top.thumbStart)
+	}
+
+	bottom := calculateScrollbarGeometry(12, 40, 10, 1, true)
+	if bottom.thumbEnd != 11 {
+		t.Fatalf("expected bottom thumb to end before inset row 11, got %d", bottom.thumbEnd)
+	}
+
+	nearlyFull := calculateScrollbarGeometry(5, 6, 5, 0, true)
+	if got := nearlyFull.thumbEnd - nearlyFull.thumbStart; got != 2 {
+		t.Fatalf("expected nearly-full document to retain one row of thumb travel, got thumb length %d", got)
+	}
+}
+
+func TestScrollbarTargetOffsetPreservesGrabPoint(t *testing.T) {
+	geometry := calculateScrollbarGeometry(12, 40, 10, 0, true)
+	for row := geometry.thumbStart; row < geometry.thumbEnd; row++ {
+		grab := scrollbarGrabOffset(row, geometry)
+		if got := scrollbarTargetOffset(row, grab, 12, 40, 10, 30, true); got != 0 {
+			t.Fatalf("expected clicking top thumb row %d to preserve offset 0, got %d", row, got)
+		}
+	}
+
+	grab := scrollbarGrabOffset(geometry.thumbStart, geometry)
+	if got := scrollbarTargetOffset(11, grab, 12, 40, 10, 30, true); got != 30 {
+		t.Fatalf("expected dragging to bottom to reach offset 30, got %d", got)
+	}
+}
+
+func TestRenderWithScrollbarRowsLeavesEmptyRailWhenContentFits(t *testing.T) {
+	palette := paletteForStyle(defaultStyleName)
+	styles := buildStyles(palette)
+	rows := []string{"a", "b", "c"}
+
+	outRows, _ := renderWithScrollbarRows(rows, nil, 4, len(rows), len(rows), 1, styles, 0, false, nil)
+	for i, row := range outRows {
+		plain := []rune(xansi.Strip(row))
+		if len(plain) != 5 || plain[len(plain)-1] != ' ' {
+			t.Fatalf("expected empty rail on row %d, got %q", i, string(plain))
+		}
+	}
+}
+
+func TestRenderWithScrollbarRowsShowsBoundaryFlashOverThumb(t *testing.T) {
+	palette := paletteForStyle(defaultStyleName)
+	styles := buildStyles(palette)
+	rows := []string{"a", "b", "c", "d", "e"}
+
+	topRows, _ := renderWithScrollbarRows(rows, nil, 4, len(rows), 20, 0, styles, 1, false, nil)
+	if !strings.HasSuffix(xansi.Strip(topRows[0]), xansi.Strip(styles.scrollFlashTop)) {
+		t.Fatalf("expected top boundary flash, got %q", xansi.Strip(topRows[0]))
+	}
+
+	bottomRows, _ := renderWithScrollbarRows(rows, nil, 4, len(rows), 20, 1, styles, -1, false, nil)
+	if !strings.HasSuffix(xansi.Strip(bottomRows[len(bottomRows)-1]), xansi.Strip(styles.scrollFlashBottom)) {
+		t.Fatalf("expected bottom boundary flash, got %q", xansi.Strip(bottomRows[len(bottomRows)-1]))
 	}
 }
 
@@ -353,6 +421,28 @@ func TestPreviewScrollbarMouseClickAndDrag(t *testing.T) {
 	}
 }
 
+func TestPreviewScrollbarDoesNotCaptureMouseWhenContentFits(t *testing.T) {
+	m := testModelNoWatcher()
+	m.mode = modePreview
+	m.width = 120
+	m.height = 26
+	m.fullScreen = true
+	m.perfVisualMode = perfVisualForceOff
+	m.resizeViews()
+	m.setViewportContent("one\ntwo\nthree")
+
+	paneX, paneY, _, _, ok := m.previewPaneRect()
+	if !ok {
+		t.Fatal("expected preview pane rect")
+	}
+	scrollbarX := paneX + m.viewport.Width()
+	updatedAny, _ := m.Update(tea.MouseClickMsg{X: scrollbarX, Y: paneY, Button: tea.MouseLeft})
+	updated := updatedAny.(model)
+	if updated.scrollbarDrag != scrollbarDragNone {
+		t.Fatalf("expected no preview scrollbar drag, got %v", updated.scrollbarDrag)
+	}
+}
+
 func TestRenderLayoutFullScreenPreviewOmitsPaneBorders(t *testing.T) {
 	m := testModelNoWatcher()
 	m.mode = modePreview
@@ -444,6 +534,30 @@ func TestRawScrollbarMouseClickAndDrag(t *testing.T) {
 	released := releasedAny.(model)
 	if released.scrollbarDrag != scrollbarDragNone {
 		t.Fatalf("expected raw scrollbar drag to end on release, got %v", released.scrollbarDrag)
+	}
+}
+
+func TestRawScrollbarDoesNotCaptureMouseWhenContentFits(t *testing.T) {
+	m := testModelNoWatcher()
+	m.mode = modeRaw
+	m.focusRight = true
+	m.width = 100
+	m.height = 22
+	m.currentPath = "note.md"
+	m.perfVisualMode = perfVisualForceOff
+	m.resizeViews()
+	m.textarea.SetValue("one\ntwo\nthree")
+	_ = m.textarea.View()
+
+	contentX, contentY, _, _, ok := m.editRawContentRect()
+	if !ok {
+		t.Fatal("expected raw editor content rect")
+	}
+	scrollbarX := contentX + m.textarea.Width()
+	updatedAny, _ := m.Update(tea.MouseClickMsg{X: scrollbarX, Y: contentY, Button: tea.MouseLeft})
+	updated := updatedAny.(model)
+	if updated.scrollbarDrag != scrollbarDragNone {
+		t.Fatalf("expected no raw scrollbar drag, got %v", updated.scrollbarDrag)
 	}
 }
 
